@@ -24,15 +24,6 @@ export default async function handler(req: Request) {
   }
 
   try {
-    const { image } = await req.json();
-
-    if (!image) {
-      return new Response(JSON.stringify({ message: "No image provided" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
     const apiKey = process.env.REPLICATE_API_TOKEN;
     if (!apiKey) {
       return new Response(
@@ -44,17 +35,51 @@ export default async function handler(req: Request) {
       );
     }
 
-    // Upload vers Replicate Files API
-    const uploadResponse = await fetch("https://api.replicate.com/v1/files", {
+    // Récupérer le fichier depuis le FormData
+    const formData = await req.formData();
+    const file = formData.get("file") as File;
+
+    if (!file) {
+      return new Response(JSON.stringify({ message: "No file provided" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Vérifier la taille (max 50 Mo)
+    const maxSize = 50 * 1024 * 1024; // 50 MB
+    if (file.size > maxSize) {
+      return new Response(
+        JSON.stringify({ message: "File too large (max 50MB)" }),
+        {
+          status: 413,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    // Vérifier le type MIME
+    if (!file.type.startsWith("image/")) {
+      return new Response(
+        JSON.stringify({ message: "File must be an image" }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    // Créer un FormData pour Replicate
+    const replicateFormData = new FormData();
+    replicateFormData.append("content", file);
+
+    // Upload vers Replicate /v1/uploads
+    const uploadResponse = await fetch("https://api.replicate.com/v1/uploads", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        content: image,
-        filename: `upload-${Date.now()}.jpg`,
-      }),
+      body: replicateFormData,
     });
 
     if (!uploadResponse.ok) {
@@ -75,10 +100,16 @@ export default async function handler(req: Request) {
     const data = await uploadResponse.json();
 
     // Retourner l'URL publique
-    return new Response(JSON.stringify({ url: data.urls.get }), {
-      status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return new Response(
+      JSON.stringify({
+        uploaded: true,
+        url: data.urls?.get || data.url,
+      }),
+      {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      }
+    );
   } catch (error) {
     console.error("Upload error:", error);
     return new Response(
