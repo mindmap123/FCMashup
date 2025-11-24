@@ -1,9 +1,8 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import FormData from "form-data";
-import { Readable } from "stream";
+import https from "https";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // CORS headers - MUST be set before any response
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
@@ -25,7 +24,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .json({ message: "REPLICATE_API_TOKEN not configured" });
     }
 
-    // Parser le body JSON avec base64
     const { image, filename } = req.body;
 
     if (!image || typeof image !== "string") {
@@ -33,15 +31,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ message: "No image data provided" });
     }
 
-    // Vérifier que c'est bien du base64 data URL
     if (!image.startsWith("data:image/")) {
       console.error("❌ Invalid image format");
       return res.status(400).json({ message: "Invalid image format" });
     }
 
-    console.log("📤 Upload vers backend - Starting...");
+    console.log("📤 Backend upload starting...");
 
-    // Extraire le type MIME et les données base64
     const matches = image.match(/^data:([^;]+);base64,(.+)$/);
     if (!matches) {
       console.error("❌ Invalid base64 format");
@@ -53,33 +49,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const buffer = Buffer.from(base64Data, "base64");
 
     console.log(
-      `📦 Image size: ${(buffer.length / 1024 / 1024).toFixed(2)} MB`
+      `📦 Size: ${(buffer.length / 1024 / 1024).toFixed(
+        2
+      )} MB, Type: ${mimeType}`
     );
-    console.log(`📦 MIME type: ${mimeType}`);
 
-    // Vérifier la taille (max 15MB)
     if (buffer.length > 15 * 1024 * 1024) {
       console.error("❌ Image too large");
       return res.status(413).json({ message: "Image too large (max 15MB)" });
     }
 
-    // Créer FormData pour Replicate avec form-data (Node.js)
     const formData = new FormData();
-
-    // Convertir le buffer en stream pour form-data
-    const stream = Readable.from(buffer);
-
-    formData.append("content", stream, {
+    formData.append("content", buffer, {
       filename: filename || "upload.jpg",
       contentType: mimeType,
-      knownLength: buffer.length,
     });
 
-    console.log("📤 Upload vers Replicate API...");
+    console.log("📤 Uploading to Replicate...");
 
-    // Upload vers Replicate (server-to-server) avec node-fetch compatible
-    const uploadResponse = await new Promise<Response>((resolve, reject) => {
+    const uploadResult = await new Promise<any>((resolve, reject) => {
       const options = {
+        hostname: "api.replicate.com",
+        path: "/v1/uploads",
         method: "POST",
         headers: {
           Authorization: `Token ${apiKey}`,
@@ -87,33 +78,39 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         },
       };
 
-      // Utiliser fetch avec le stream de form-data
-      fetch("https://api.replicate.com/v1/uploads", {
-        ...options,
-        body: formData as any,
-      })
-        .then(resolve)
-        .catch(reject);
+      const request = https.request(options, (response) => {
+        let data = "";
+        response.on("data", (chunk) => {
+          data += chunk;
+        });
+        response.on("end", () => {
+          if (
+            response.statusCode &&
+            response.statusCode >= 200 &&
+            response.statusCode < 300
+          ) {
+            try {
+              resolve(JSON.parse(data));
+            } catch (e) {
+              reject(new Error(`Invalid JSON response: ${data}`));
+            }
+          } else {
+            reject(new Error(`HTTP ${response.statusCode}: ${data}`));
+          }
+        });
+      });
+
+      request.on("error", reject);
+      formData.pipe(request);
     });
 
-    if (!uploadResponse.ok) {
-      const error = await uploadResponse.text();
-      console.error("❌ Replicate upload error:", uploadResponse.status, error);
-      return res.status(uploadResponse.status).json({
-        message: "Failed to upload to Replicate",
-        error,
-        status: uploadResponse.status,
-      });
-    }
-
-    const data = await uploadResponse.json();
-    console.log("✅ Upload vers Replicate OK");
-    console.log("📍 URL:", data.urls?.get || data.url);
+    console.log("✅ Upload successful");
+    console.log("📍 URL:", uploadResult.urls?.get || uploadResult.url);
 
     return res.status(200).json({
       uploaded: true,
-      url: data.urls?.get || data.url,
-      id: data.id,
+      url: uploadResult.urls?.get || uploadResult.url,
+      id: uploadResult.id,
     });
   } catch (error) {
     console.error("❌ Upload error:", error);
