@@ -212,21 +212,19 @@ export default function FranceCanapeV6() {
     >
       <OfflineBadge isOffline={isOffline} />
 
-      <div className="max-w-6xl mx-auto px-4 py-8">
+      <div className="max-w-6xl mx-auto px-4 py-4">
         {/* Sélecteur compact + Mode Duo + Recommencer */}
-        <div className="flex items-center justify-center gap-4 mb-6 flex-wrap">
+        <div className="flex items-center justify-center gap-4 mb-4 flex-wrap">
           <CompactModelSelector
             selectedModel={selectedModel}
             onSelectModel={handleModelSelect}
             disabled={isGenerating}
           />
-          <div className="scale-90">
-            <DuoModeToggle
-              enabled={isDuoMode}
-              onChange={setIsDuoMode}
-              disabled={isGenerating}
-            />
-          </div>
+          <DuoModeToggle
+            enabled={isDuoMode}
+            onChange={setIsDuoMode}
+            disabled={isGenerating}
+          />
           <Button
             onClick={handleRestart}
             variant="outline"
