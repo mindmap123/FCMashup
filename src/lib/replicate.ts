@@ -17,8 +17,14 @@ async function getReplicateToken(): Promise<string> {
   }
 
   const data = await response.json();
-  cachedToken = data.token;
-  return cachedToken;
+  const token = data.token;
+
+  if (!token) {
+    throw new Error("No token received from API");
+  }
+
+  cachedToken = token;
+  return token;
 }
 
 export async function generateCanapeWithReplicate(
