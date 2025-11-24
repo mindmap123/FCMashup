@@ -5,11 +5,29 @@ Toutes les modifications notables de ce projet seront documentées dans ce fichi
 Le format est basé sur [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/),
 et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 
+## [1.0.1] - 2024-11-24
+
+### Modifié
+
+- **Upload Backend**: Refonte complète du système d'upload pour compatibilité Vercel
+  - `/api/upload.ts` accepte maintenant du JSON avec base64 au lieu de FormData
+  - Suppression de la dépendance `formidable` (plus nécessaire)
+  - Upload server-to-server vers Replicate pour contourner CORS
+  - Logs améliorés: `📤 Upload vers backend` → `📤 Upload vers Replicate` → `✅ OK`
+- **Frontend**: `uploadToReplicate` appelle `/api/upload` au lieu de l'API Replicate directe
+- **Sécurité**: Token Replicate jamais exposé côté client
+
+### Ajouté
+
+- Documentation `BACKEND_UPLOAD_SYSTEM.md` expliquant l'architecture
+- Script de test `scripts/test-upload.sh` pour valider les endpoints
+
 ## [1.0.0] - 2024-01-XX
 
 ### Ajouté
 
 #### Fonctionnalités Principales
+
 - Sélection de modèle IA (Banana Pro / Seedream)
 - Upload d'images par drag & drop
 - Sélection de fichiers depuis l'appareil
@@ -21,6 +39,7 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 - Fonction "Recommencer"
 
 #### Interface Utilisateur
+
 - Design responsive (mobile, tablette, desktop)
 - Layout optimisé iPad (2 colonnes en landscape)
 - Thèmes dynamiques selon le modèle sélectionné
@@ -29,6 +48,7 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 - Feedback visuel pour drag & drop
 
 #### Composants
+
 - `ModelSelector` : Sélection du modèle IA
 - `ImageUploadZone` : Zone d'upload avec preview
 - `FabricDescription` : Champ de description
@@ -39,9 +59,11 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 - `Card` : Composant carte réutilisable
 
 #### Hooks Personnalisés
+
 - `useCanapeGenerator` : Gestion complète de l'état et de la logique
 
 #### Backend
+
 - Fonction Deno Edge pour Replicate API
 - Support Banana Pro (Google)
 - Support Seedream (ByteDance)
@@ -50,17 +72,20 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 - Polling automatique des résultats
 
 #### Notifications
+
 - Toasts pour succès, erreurs et informations
 - Auto-dismiss configurable
 - Position centrée en haut
 - Rich colors pour meilleure visibilité
 
 #### Validation
+
 - Validation des types de fichiers (JPEG, PNG, WebP)
 - Limite de taille (10MB)
 - Messages d'erreur descriptifs
 
 #### Documentation
+
 - README complet avec instructions
 - Guide de déploiement (DEPLOYMENT.md)
 - Documentation technique (TECHNICAL.md)
@@ -68,6 +93,7 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 - Fichier .env.example
 
 #### Configuration
+
 - TypeScript strict mode
 - ESLint avec règles React
 - Tailwind CSS avec thèmes personnalisés
@@ -75,6 +101,7 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 - Path aliases (@/)
 
 ### Sécurité
+
 - Token API non exposé côté client
 - Validation stricte des inputs
 - CORS configuré
@@ -83,6 +110,7 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 ## [Unreleased]
 
 ### À Venir
+
 - Authentification utilisateur
 - Historique des générations
 - Partage de résultats
@@ -95,6 +123,7 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 - Système de feedback
 
 ### En Considération
+
 - Support de plus de modèles IA
 - Édition avancée (ajustements de couleur, contraste)
 - Intégration avec plateformes e-commerce
@@ -111,23 +140,27 @@ et ce projet adhère au [Semantic Versioning](https://semver.org/lang/fr/).
 Cette première version établit les fondations de l'application avec toutes les fonctionnalités essentielles pour visualiser un canapé avec un tissu personnalisé.
 
 **Points Forts** :
+
 - Interface intuitive et responsive
 - Deux modèles IA au choix
 - Résultats de haute qualité
 - Déploiement simple
 
 **Limitations Connues** :
+
 - Pas d'authentification (toutes les générations sont anonymes)
 - Pas d'historique (les résultats ne sont pas sauvegardés)
 - Upload limité à 10MB par image
 - Temps de génération variable (20-60s)
 
 **Compatibilité** :
+
 - Navigateurs modernes (Chrome, Firefox, Safari, Edge)
 - iOS 14+ / Android 10+
 - Tablettes et desktop
 
 **Performance** :
+
 - First Contentful Paint : < 1.5s
 - Time to Interactive : < 3s
 - Bundle size : ~150KB (gzipped)

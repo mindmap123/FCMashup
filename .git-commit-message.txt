@@ -1,0 +1,46 @@
+feat: backend upload system compatible Vercel (CORS fix)
+
+Refonte complète du système d'upload pour résoudre les problèmes CORS
+avec Replicate et assurer la compatibilité Vercel.
+
+## Changements Principaux
+
+### Backend
+- `/api/upload.ts`: Accepte JSON + base64 au lieu de FormData
+- Suppression de formidable (plus nécessaire)
+- Upload server-to-server vers Replicate avec Token sécurisé
+- Logs détaillés: 📤 Upload vers backend → 📤 Upload vers Replicate → ✅ OK
+
+### Frontend
+- `uploadToReplicate.ts`: Appelle `/api/upload` au lieu de l'API Replicate directe
+- `replicate.ts`: Upload automatique des data URLs avant génération
+- Logs cohérents avec le backend
+
+### Sécurité
+- ✅ Token Replicate jamais exposé côté client
+- ✅ Validation stricte des formats d'image
+- ✅ `/api/generate` rejette les data URLs (accepte uniquement URLs HTTP)
+- ✅ CORS configuré sur tous les endpoints
+
+### Documentation
+- `BACKEND_UPLOAD_SYSTEM.md`: Architecture complète
+- `UPLOAD_FLOW.md`: Diagramme de flux visuel
+- `scripts/test-upload.sh`: Script de test des endpoints
+- `CHANGELOG.md`: Mise à jour avec version 1.0.1
+
+### Dépendances
+- ❌ Supprimé: formidable, @types/formidable
+- ✅ Conservé: form-data (pour FormData côté serveur)
+
+## Déploiement Vercel
+
+Vercel détectera automatiquement:
+- `/api/upload.ts` → Serverless Function
+- `/api/generate.ts` → Edge Function
+- Frontend → Static Site
+
+## Tests
+
+✅ Type-check: Aucune erreur TypeScript
+✅ Build: Compilation réussie
+✅ Diagnostics: Tous les fichiers validés

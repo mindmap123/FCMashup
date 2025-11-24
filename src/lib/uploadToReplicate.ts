@@ -4,6 +4,8 @@
  */
 export async function uploadImageToReplicate(file: File): Promise<string> {
   try {
+    console.log("📤 Upload vers backend...");
+
     // Convertir le fichier en base64
     const base64 = await fileToBase64(file);
 
@@ -32,9 +34,10 @@ export async function uploadImageToReplicate(file: File): Promise<string> {
       throw new Error("Invalid response from upload API");
     }
 
+    console.log("✅ Upload vers Replicate OK");
     return data.url;
   } catch (error) {
-    console.error("Error uploading to Replicate:", error);
+    console.error("❌ Error uploading to Replicate:", error);
     throw new Error(
       error instanceof Error ? error.message : "Failed to upload image"
     );
