@@ -1,76 +1,15 @@
-// Configuration pour Vercel Node Runtime
+import type { VercelRequest, VercelResponse } from "@vercel/node";
+import formidable from "formidable";
+import fs from "fs";
+
+// Configuration pour Vercel
 export const config = {
   api: {
-    bodyParser: false, // Désactiver le parser par défaut pour gérer FormData
+    bodyParser: false, // Désactiver pour gérer FormData
   },
 };
 
-import type { IncomingMessage, ServerResponse } from "http";
-import { Readable } from "stream";
-
-// Helper pour parser le multipart/form-data
-async function parseMultipartForm(
-  req: IncomingMessage
-): Promise<{ file: Buffer; filename: string; mimetype: string } | null> {
-  return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = [];
-
-    req.on("data", (chunk: Buffer) => {
-      chunks.push(chunk);
-    });
-
-    req.on("end", () => {
-      try {
-        const buffer = Buffer.concat(chunks);
-        const boundary = req.headers["content-type"]?.split("boundary=")[1];
-
-        if (!boundary) {
-          resolve(null);
-          return;
-        }
-
-        const parts = buffer.toString("binary").split(`--${boundary}`);
-
-        for (const part of parts) {
-          if (
-            part.includes("Content-Disposition") &&
-            part.includes("filename=")
-          ) {
-            const filenameMatch = part.match(/filename="([^"]+)"/);
-            const contentTypeMatch = part.match(/Content-Type: ([^\r\n]+)/);
-
-            if (filenameMatch) {
-              const filename = filenameMatch[1];
-              const mimetype = contentTypeMatch
-                ? contentTypeMatch[1]
-                : "application/octet-stream";
-
-              // Extraire le contenu binaire du fichier
-              const fileStart = part.indexOf("\r\n\r\n") + 4;
-              const fileEnd = part.lastIndexOf("\r\n");
-              const fileContent = part.substring(fileStart, fileEnd);
-              const fileBuffer = Buffer.from(fileContent, "binary");
-
-              resolve({ file: fileBuffer, filename, mimetype });
-              return;
-            }
-          }
-        }
-
-        resolve(null);
-      } catch (error) {
-        reject(error);
-      }
-    });
-
-    req.on("error", reject);
-  });
-}
-
-export default async function handler(
-  req: IncomingMessage,
-  res: ServerResponse
-) {
+export default async function handler(req: VercelRequest, res: VercelResponse) {
   // CORS headers
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -78,112 +17,88 @@ export default async function handler(
 
   // Handle preflight
   if (req.method === "OPTIONS") {
-    res.statusCode = 204;
-    res.end();
-    return;
+    return res.status(204).end();
   }
 
   if (req.method !== "POST") {
-    res.statusCode = 405;
-    res.setHeader("Content-Type", "application/json");
-    res.end(JSON.stringify({ message: "Method not allowed" }));
-    return;
+    return res.status(405).json({ message: "Method not allowed" });
   }
 
   try {
     const apiKey = process.env.REPLICATE_API_TOKEN;
     if (!apiKey) {
-      res.statusCode = 500;
-      res.setHeader("Content-Type", "application/json");
-      res.end(
-        JSON.stringify({ message: "REPLICATE_API_TOKEN not configured" })
-      );
-      return;
+      return res
+        .status(500)
+        .json({ message: "REPLICATE_API_TOKEN not configured" });
     }
 
-    // Parser le multipart/form-data
-    const fileData = await parseMultipartForm(req);
+    // Parser le FormData avec formidable
+    const form = formidable({ maxFileSize: 50 * 1024 * 1024 }); // 50 MB max
 
-    if (!fileData) {
-      res.statusCode = 400;
-      res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify({ message: "No file provided" }));
-      return;
-    }
+    const [fields, files] = await new Promise<
+      [formidable.Fields, formidable.Files]
+    >((resolve, reject) => {
+      form.parse(req, (err, fields, files) => {
+        if (err) reject(err);
+        else resolve([fields, files]);
+      });
+    });
 
-    // Vérifier la taille (max 50 Mo)
-    const maxSize = 50 * 1024 * 1024; // 50 MB
-    if (fileData.file.length > maxSize) {
-      res.statusCode = 413;
-      res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify({ message: "File too large (max 50MB)" }));
-      return;
+    const file = Array.isArray(files.file) ? files.file[0] : files.file;
+
+    if (!file) {
+      return res.status(400).json({ message: "No file provided" });
     }
 
     // Vérifier le type MIME
-    if (!fileData.mimetype.startsWith("image/")) {
-      res.statusCode = 400;
-      res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify({ message: "File must be an image" }));
-      return;
+    if (!file.mimetype?.startsWith("image/")) {
+      return res.status(400).json({ message: "File must be an image" });
     }
 
-    // Créer le boundary pour multipart/form-data
-    const boundary = `----WebKitFormBoundary${Math.random()
-      .toString(36)
-      .substring(2)}`;
-    const formDataBody = [
-      `--${boundary}`,
-      `Content-Disposition: form-data; name="content"; filename="${fileData.filename}"`,
-      `Content-Type: ${fileData.mimetype}`,
-      "",
-      fileData.file.toString("binary"),
-      `--${boundary}--`,
-    ].join("\r\n");
+    // Lire le fichier
+    const fileBuffer = fs.readFileSync(file.filepath);
 
-    // Upload vers Replicate /v1/uploads
+    // Créer le FormData pour Replicate
+    const FormData = (await import("form-data")).default;
+    const formData = new FormData();
+    formData.append("content", fileBuffer, {
+      filename: file.originalFilename || "upload.jpg",
+      contentType: file.mimetype || "image/jpeg",
+    });
+
+    // Upload vers Replicate
     const uploadResponse = await fetch("https://api.replicate.com/v1/uploads", {
       method: "POST",
       headers: {
         Authorization: `Token ${apiKey}`,
-        "Content-Type": `multipart/form-data; boundary=${boundary}`,
+        ...formData.getHeaders(),
       },
-      body: Buffer.from(formDataBody, "binary"),
+      body: formData as any,
     });
+
+    // Nettoyer le fichier temporaire
+    fs.unlinkSync(file.filepath);
 
     if (!uploadResponse.ok) {
       const error = await uploadResponse.text();
       console.error("Replicate upload error:", error);
-      res.statusCode = uploadResponse.status;
-      res.setHeader("Content-Type", "application/json");
-      res.end(
-        JSON.stringify({
-          message: "Failed to upload to Replicate",
-          error,
-        })
-      );
-      return;
+      return res.status(uploadResponse.status).json({
+        message: "Failed to upload to Replicate",
+        error,
+      });
     }
 
     const data = await uploadResponse.json();
 
-    // Retourner l'URL publique
-    res.statusCode = 200;
-    res.setHeader("Content-Type", "application/json");
-    res.end(
-      JSON.stringify({
-        uploaded: true,
-        url: data.urls?.get || data.url,
-      })
-    );
+    // Retourner l'URL
+    return res.status(200).json({
+      uploaded: true,
+      url: data.urls?.get || data.url,
+    });
   } catch (error) {
     console.error("Upload error:", error);
-    res.statusCode = 500;
-    res.setHeader("Content-Type", "application/json");
-    res.end(
-      JSON.stringify({
-        message: error instanceof Error ? error.message : "Unknown error",
-      })
-    );
+    return res.status(500).json({
+      message: error instanceof Error ? error.message : "Unknown error",
+    });
   }
 }
