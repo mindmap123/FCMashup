@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Test Upload API</title>
+    <style>
+      body {
+        font-family: system-ui, -apple-system, sans-serif;
+        max-width: 800px;
+        margin: 50px auto;
+        padding: 20px;
+        background: #f5f5f5;
+      }
+      .container {
+        background: white;
+        padding: 30px;
+        border-radius: 10px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      }
+      h1 {
+        color: #333;
+      }
+      button {
+        background: #0070f3;
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 16px;
+        margin: 10px 5px;
+      }
+      button:hover {
+        background: #0051cc;
+      }
+      button:disabled {
+        background: #ccc;
+        cursor: not-allowed;
+      }
+      input[type="file"] {
+        margin: 20px 0;
+        padding: 10px;
+        border: 2px dashed #ddd;
+        border-radius: 6px;
+        width: 100%;
+      }
+      .log {
+        background: #1e1e1e;
+        color: #d4d4d4;
+        padding: 20px;
+        border-radius: 6px;
+        margin-top: 20px;
+        font-family: "Courier New", monospace;
+        font-size: 14px;
+        max-height: 400px;
+        overflow-y: auto;
+      }
+      .log-entry {
+        margin: 5px 0;
+        padding: 5px;
+      }
+      .success {
+        color: #4ade80;
+      }
+      .error {
+        color: #f87171;
+      }
+      .info {
+        color: #60a5fa;
+      }
+      .warning {
+        color: #fbbf24;
+      }
+      img {
+        max-width: 100%;
+        margin-top: 20px;
+        border-radius: 6px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>🧪 Test Upload API</h1>
+      <p>Testez l'upload d'images vers Replicate via le backend</p>
+
+      <input type="file" id="fileInput" accept="image/*" />
+
+      <div>
+        <button onclick="testToken()">1. Test Token</button>
+        <button onclick="testUpload()" id="uploadBtn" disabled>
+          2. Test Upload
+        </button>
+        <button onclick="clearLog()">Effacer Log</button>
+      </div>
+
+      <div class="log" id="log"></div>
+
+      <div id="preview"></div>
+    </div>
+
+    <script>
+      const API_URL = window.location.origin;
+      let selectedFile = null;
+
+      document.getElementById("fileInput").addEventListener("change", (e) => {
+        selectedFile = e.target.files[0];
+        if (selectedFile) {
+          log(
+            `📁 Fichier sélectionné: ${selectedFile.name} (${(
+              selectedFile.size /
+              1024 /
+              1024
+            ).toFixed(2)} MB)`,
+            "info"
+          );
+          document.getElementById("uploadBtn").disabled = false;
+        }
+      });
+
+      function log(message, type = "info") {
+        const logDiv = document.getElementById("log");
+        const entry = document.createElement("div");
+        entry.className = `log-entry ${type}`;
+        entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+        logDiv.appendChild(entry);
+        logDiv.scrollTop = logDiv.scrollHeight;
+      }
+
+      function clearLog() {
+        document.getElementById("log").innerHTML = "";
+        document.getElementById("preview").innerHTML = "";
+      }
+
+      async function testToken() {
+        log("🔍 Vérification du token...", "info");
+
+        try {
+          const response = await fetch(`${API_URL}/api/token`);
+          const data = await response.json();
+
+          if (data.configured) {
+            log(`✅ Token configuré: ${data.prefix}`, "success");
+          } else {
+            log("❌ Token non configuré", "error");
+          }
+        } catch (error) {
+          log(`❌ Erreur: ${error.message}`, "error");
+        }
+      }
+
+      async function testUpload() {
+        if (!selectedFile) {
+          log("❌ Aucun fichier sélectionné", "error");
+          return;
+        }
+
+        log("📤 Conversion du fichier en base64...", "info");
+
+        try {
+          // Convertir en base64
+          const base64 = await fileToBase64(selectedFile);
+          log(
+            `✅ Conversion réussie (${(base64.length / 1024).toFixed(2)} KB)`,
+            "success"
+          );
+
+          log("📤 Upload vers /api/upload...", "info");
+
+          const startTime = Date.now();
+          const response = await fetch(`${API_URL}/api/upload`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              image: base64,
+              filename: selectedFile.name,
+            }),
+          });
+
+          const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+
+          if (!response.ok) {
+            const error = await response.json();
+            log(
+              `❌ Upload échoué (${response.status}): ${error.message}`,
+              "error"
+            );
+            return;
+          }
+
+          const data = await response.json();
+
+          if (data.uploaded && data.url) {
+            log(`✅ Upload réussi en ${duration}s`, "success");
+            log(`📍 URL Replicate: ${data.url}`, "success");
+            log(`🆔 ID: ${data.id}`, "info");
+
+            // Afficher l'image
+            const preview = document.getElementById("preview");
+            preview.innerHTML = `
+                        <h3>Image uploadée:</h3>
+                        <img src="${data.url}" alt="Uploaded image">
+                        <p><a href="${data.url}" target="_blank">Ouvrir dans un nouvel onglet</a></p>
+                    `;
+          } else {
+            log("❌ Réponse invalide du serveur", "error");
+          }
+        } catch (error) {
+          log(`❌ Erreur: ${error.message}`, "error");
+          console.error(error);
+        }
+      }
+
+      function fileToBase64(file) {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+      }
+
+      // Auto-test au chargement
+      window.addEventListener("load", () => {
+        log("🚀 Page de test chargée", "info");
+        log(`🌐 API URL: ${API_URL}`, "info");
+        testToken();
+      });
+    </script>
+  </body>
+</html>
