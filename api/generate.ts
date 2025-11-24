@@ -1,4 +1,7 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+// Edge Function configuration
+export const config = {
+  runtime: "edge",
+};
 
 interface GenerateRequest {
   sofa_url: string;
@@ -7,39 +10,57 @@ interface GenerateRequest {
   model: "banana" | "seedream";
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: Request) {
   // CORS headers
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  const corsHeaders = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+  };
 
   // Handle preflight
   if (req.method === "OPTIONS") {
-    return res.status(204).end();
+    return new Response(null, { status: 204, headers: corsHeaders });
   }
 
   if (req.method !== "POST") {
-    return res.status(405).json({ message: "Method not allowed" });
+    return new Response(JSON.stringify({ message: "Method not allowed" }), {
+      status: 405,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 
   try {
-    const body = req.body as GenerateRequest;
+    const body = (await req.json()) as GenerateRequest;
     const { sofa_url, fabric_url, description = "", model } = body;
 
     if (!sofa_url || !fabric_url) {
-      return res.status(400).json({ message: "Missing image URLs" });
+      return new Response(JSON.stringify({ message: "Missing image URLs" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     // Valider que ce sont bien des URLs
     if (!sofa_url.startsWith("http") || !fabric_url.startsWith("http")) {
-      return res.status(400).json({ message: "Invalid URLs provided" });
+      return new Response(
+        JSON.stringify({ message: "Invalid URLs provided" }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
     }
 
     const apiKey = process.env.REPLICATE_API_TOKEN;
     if (!apiKey) {
-      return res
-        .status(500)
-        .json({ message: "REPLICATE_API_TOKEN not configured" });
+      return new Response(
+        JSON.stringify({ message: "REPLICATE_API_TOKEN not configured" }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
     }
 
     const basePrompt = `Use the first image strictly as the base photo. Do not modify the sofa's shape, proportions, stitching, cushions, seams, legs, lighting, shadows, background, or perspective. The sofa geometry must remain IDENTICAL to the first image.
@@ -94,13 +115,25 @@ The fabric appearance must match the sample exactly: same color tone, same weave
     try {
       data = raw ? JSON.parse(raw) : null;
     } catch {
-      return res.status(500).json({ message: "Invalid Replicate response" });
+      return new Response(
+        JSON.stringify({ message: "Invalid Replicate response" }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
     }
 
     if (!replicateRes.ok) {
-      return res.status(400).json({
-        message: data?.detail || `Replicate error: ${replicateRes.status}`,
-      });
+      return new Response(
+        JSON.stringify({
+          message: data?.detail || `Replicate error: ${replicateRes.status}`,
+        }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
     }
 
     // Extract image URL
@@ -118,14 +151,29 @@ The fabric appearance must match the sample exactly: same color tone, same weave
     }
 
     if (!imageUrl) {
-      return res.status(500).json({ message: "No image URL generated" });
+      return new Response(
+        JSON.stringify({ message: "No image URL generated" }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
     }
 
-    return res.status(200).json({ imageUrl });
+    return new Response(JSON.stringify({ imageUrl }), {
+      status: 200,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   } catch (error) {
     console.error("Error:", error);
-    return res.status(500).json({
-      message: error instanceof Error ? error.message : "Unknown error",
-    });
+    return new Response(
+      JSON.stringify({
+        message: error instanceof Error ? error.message : "Unknown error",
+      }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      }
+    );
   }
 }

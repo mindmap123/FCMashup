@@ -1,32 +1,47 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
+// Edge Function configuration
+export const config = {
+  runtime: "edge",
+};
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: Request) {
   // CORS headers
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  const corsHeaders = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+  };
 
   // Handle preflight
   if (req.method === "OPTIONS") {
-    return res.status(204).end();
+    return new Response(null, { status: 204, headers: corsHeaders });
   }
 
   if (req.method !== "POST") {
-    return res.status(405).json({ message: "Method not allowed" });
+    return new Response(JSON.stringify({ message: "Method not allowed" }), {
+      status: 405,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
 
   try {
-    const { image } = req.body;
+    const { image } = await req.json();
 
     if (!image) {
-      return res.status(400).json({ message: "No image provided" });
+      return new Response(JSON.stringify({ message: "No image provided" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const apiKey = process.env.REPLICATE_API_TOKEN;
     if (!apiKey) {
-      return res
-        .status(500)
-        .json({ message: "REPLICATE_API_TOKEN not configured" });
+      return new Response(
+        JSON.stringify({ message: "REPLICATE_API_TOKEN not configured" }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
     }
 
     // Upload vers Replicate Files API
@@ -45,20 +60,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!uploadResponse.ok) {
       const error = await uploadResponse.text();
       console.error("Replicate upload error:", error);
-      return res.status(uploadResponse.status).json({
-        message: "Failed to upload to Replicate",
-        error,
-      });
+      return new Response(
+        JSON.stringify({
+          message: "Failed to upload to Replicate",
+          error,
+        }),
+        {
+          status: uploadResponse.status,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
     }
 
     const data = await uploadResponse.json();
 
     // Retourner l'URL publique
-    return res.status(200).json({ url: data.urls.get });
+    return new Response(JSON.stringify({ url: data.urls.get }), {
+      status: 200,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   } catch (error) {
     console.error("Upload error:", error);
-    return res.status(500).json({
-      message: error instanceof Error ? error.message : "Unknown error",
-    });
+    return new Response(
+      JSON.stringify({
+        message: error instanceof Error ? error.message : "Unknown error",
+      }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      }
+    );
   }
 }
