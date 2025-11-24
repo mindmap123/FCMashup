@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Vider le localStorage</title>
+</head>
+<body>
+    <h1>Nettoyage du localStorage</h1>
+    <button onclick="clearStorage()">Vider l'historique</button>
+    <p id="result"></p>
+    <script>
+        function clearStorage() {
+            localStorage.removeItem('france-canape-history');
+            document.getElementById('result').textContent = '✅ Historique vidé !';
+        }
+        
+        // Afficher la taille actuelle
+        const history = localStorage.getItem('france-canape-history');
+        if (history) {
+            const size = new Blob([history]).size;
+            document.getElementById('result').textContent = 
+                `Taille actuelle: ${(size / 1024).toFixed(2)} KB`;
+        }
+    </script>
+</body>
+</html>
