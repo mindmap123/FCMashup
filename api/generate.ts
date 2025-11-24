@@ -1,9 +1,9 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 
 interface GenerateRequest {
-  imageSofaUrl: string;
-  imageFabricUrl: string;
-  fabricDescription?: string;
+  sofa_url: string;
+  fabric_url: string;
+  description?: string;
   model: "banana" | "seedream";
 }
 
@@ -24,15 +24,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const body = req.body as GenerateRequest;
-    const {
-      imageSofaUrl,
-      imageFabricUrl,
-      fabricDescription = "",
-      model,
-    } = body;
+    const { sofa_url, fabric_url, description = "", model } = body;
 
-    if (!imageSofaUrl || !imageFabricUrl) {
+    if (!sofa_url || !fabric_url) {
       return res.status(400).json({ message: "Missing image URLs" });
+    }
+
+    // Valider que ce sont bien des URLs
+    if (!sofa_url.startsWith("http") || !fabric_url.startsWith("http")) {
+      return res.status(400).json({ message: "Invalid URLs provided" });
     }
 
     const apiKey = process.env.REPLICATE_API_TOKEN;
@@ -48,8 +48,8 @@ Use the second image ONLY as a fabric reference (texture, color, grain, weave, r
 
 The fabric appearance must match the sample exactly: same color tone, same weave density, same thread pattern, same texture scale. Keep everything photorealistic and consistent with the original lighting.`;
 
-    const prompt = fabricDescription
-      ? `${basePrompt}\n\nExtra fabric details: ${fabricDescription}`
+    const prompt = description
+      ? `${basePrompt}\n\nExtra fabric details: ${description}`
       : basePrompt;
 
     let modelPath: string;
@@ -60,7 +60,7 @@ The fabric appearance must match the sample exactly: same color tone, same weave
       inputPayload = {
         prompt,
         resolution: "2K",
-        image_input: [imageSofaUrl, imageFabricUrl],
+        image_input: [sofa_url, fabric_url],
         aspect_ratio: "match_input_image",
         output_format: "png",
         safety_filter_level: "block_only_high",
@@ -69,7 +69,7 @@ The fabric appearance must match the sample exactly: same color tone, same weave
       modelPath = "bytedance/seedream-4";
       inputPayload = {
         prompt,
-        image_input: [imageSofaUrl, imageFabricUrl],
+        image_input: [sofa_url, fabric_url],
         size: "2K",
         aspect_ratio: "match_input_image",
         max_images: 1,

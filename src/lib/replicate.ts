@@ -1,4 +1,5 @@
 import { GenerationRequest, GenerationResponse } from "@/types";
+import { uploadImageToReplicate } from "./uploadToReplicate";
 
 // En production (Vercel), utilise /api/generate
 // En développement, utilise l'URL du backend local si définie
@@ -8,12 +9,39 @@ export async function generateCanapeWithReplicate(
   request: GenerationRequest
 ): Promise<GenerationResponse> {
   try {
+    // Étape 1 : Upload des images vers Replicate si ce sont des data URLs
+    let sofaUrl = request.imageSofaUrl;
+    let fabricUrl = request.imageFabricUrl;
+
+    // Si les URLs sont des data URLs (base64), les uploader d'abord
+    if (sofaUrl.startsWith("data:")) {
+      console.log("📤 Upload de l'image du canapé vers Replicate...");
+      const blob = await fetch(sofaUrl).then((r) => r.blob());
+      const file = new File([blob], "sofa.jpg", { type: "image/jpeg" });
+      sofaUrl = await uploadImageToReplicate(file);
+      console.log("✅ Canapé uploadé:", sofaUrl);
+    }
+
+    if (fabricUrl.startsWith("data:")) {
+      console.log("📤 Upload de l'image du tissu vers Replicate...");
+      const blob = await fetch(fabricUrl).then((r) => r.blob());
+      const file = new File([blob], "fabric.jpg", { type: "image/jpeg" });
+      fabricUrl = await uploadImageToReplicate(file);
+      console.log("✅ Tissu uploadé:", fabricUrl);
+    }
+
+    // Étape 2 : Appeler l'API de génération avec les URLs
     const response = await fetch(BACKEND_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(request),
+      body: JSON.stringify({
+        sofa_url: sofaUrl,
+        fabric_url: fabricUrl,
+        description: request.fabricDescription,
+        model: request.model,
+      }),
     });
 
     if (!response.ok) {
