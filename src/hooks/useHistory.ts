@@ -1,76 +1,88 @@
 import { useState, useEffect } from "react";
 import { HistoryItem } from "@/types";
-
-const HISTORY_KEY = "france-canape-history";
-const MAX_HISTORY_ITEMS = 5; // Réduit pour éviter de saturer le localStorage
+import { getHistory, deleteHistoryEntry } from "@/lib/historyService";
 
 export function useHistory() {
   const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // Charger l'historique au démarrage
+  // Charger l'historique depuis Supabase au démarrage
   useEffect(() => {
-    const stored = localStorage.getItem(HISTORY_KEY);
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
-        setHistory(parsed);
-      } catch (error) {
-        console.error("Erreur lors du chargement de l'historique", error);
-        // Si l'historique est corrompu, le vider
-        localStorage.removeItem(HISTORY_KEY);
-      }
-    }
+    loadHistory();
   }, []);
 
-  // Ajouter un élément à l'historique
-  const addToHistory = (item: Omit<HistoryItem, "id" | "timestamp">) => {
-    const newItem: HistoryItem = {
-      ...item,
-      id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      timestamp: Date.now(),
-    };
-
-    const updatedHistory = [newItem, ...history].slice(0, MAX_HISTORY_ITEMS);
-    setHistory(updatedHistory);
-
-    // Gestion d'erreur pour quota dépassé
+  const loadHistory = async () => {
     try {
-      localStorage.setItem(HISTORY_KEY, JSON.stringify(updatedHistory));
+      setLoading(true);
+      const data = await getHistory();
+
+      // Convertir les données Supabase au format HistoryItem
+      const formattedHistory: HistoryItem[] = data.map((item) => ({
+        id: item.id.toString(),
+        timestamp: new Date(item.created_at).getTime(),
+        sofaImage: item.metadata?.sofaUrl || "",
+        fabricImage: item.metadata?.fabricUrl || "",
+        resultImage: item.image_url,
+        model: (item.metadata?.model || "banana") as "banana" | "seedream",
+        description: item.metadata?.description,
+        mode: item.type === "duo" ? "duo" : "normal",
+        tissu1Url: item.metadata?.fabricUrl,
+        tissu2Url: item.metadata?.fabricUrl2,
+      }));
+
+      setHistory(formattedHistory);
     } catch (error) {
-      console.warn("⚠️ Quota localStorage dépassé, nettoyage de l'historique");
-      // Vider l'historique et réessayer avec seulement le nouvel item
-      const minimalHistory = [newItem];
-      setHistory(minimalHistory);
-      try {
-        localStorage.setItem(HISTORY_KEY, JSON.stringify(minimalHistory));
-      } catch {
-        console.error("❌ Impossible de sauvegarder l'historique");
-        localStorage.removeItem(HISTORY_KEY);
+      console.error("❌ Error loading history from Supabase:", error);
+      // Fallback vers localStorage si Supabase échoue
+      const stored = localStorage.getItem("france-canape-history");
+      if (stored) {
+        try {
+          setHistory(JSON.parse(stored));
+        } catch {
+          setHistory([]);
+        }
       }
+    } finally {
+      setLoading(false);
     }
   };
 
+  // Ajouter un élément à l'historique (maintenant géré par useCanapeGenerator)
+  const addToHistory = (_item: Omit<HistoryItem, "id" | "timestamp">) => {
+    // Cette fonction est maintenant un no-op car la sauvegarde est faite dans useCanapeGenerator
+    // On recharge juste l'historique depuis Supabase
+    loadHistory();
+  };
+
   // Supprimer un élément
-  const removeFromHistory = (id: string) => {
-    const updatedHistory = history.filter((item) => item.id !== id);
-    setHistory(updatedHistory);
+  const removeFromHistory = async (id: string) => {
     try {
-      localStorage.setItem(HISTORY_KEY, JSON.stringify(updatedHistory));
+      await deleteHistoryEntry(parseInt(id));
+      setHistory((prev) => prev.filter((item) => item.id !== id));
     } catch (error) {
-      console.error("Erreur lors de la suppression de l'historique", error);
+      console.error("❌ Error deleting history entry:", error);
     }
   };
 
   // Vider l'historique
-  const clearHistory = () => {
-    setHistory([]);
-    localStorage.removeItem(HISTORY_KEY);
+  const clearHistory = async () => {
+    try {
+      // Supprimer tous les éléments un par un
+      await Promise.all(
+        history.map((item) => deleteHistoryEntry(parseInt(item.id)))
+      );
+      setHistory([]);
+    } catch (error) {
+      console.error("❌ Error clearing history:", error);
+    }
   };
 
   return {
     history,
+    loading,
     addToHistory,
     removeFromHistory,
     clearHistory,
+    refreshHistory: loadHistory,
   };
 }

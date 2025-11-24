@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { AIModel, AppState, UploadedImage } from "@/types";
 import { validateImageFile, createImagePreview } from "@/lib/validators";
 import { generateCanapeWithReplicate } from "@/lib/replicate";
+import { saveHistory } from "@/lib/historyService";
 
 export function useCanapeGenerator() {
   const [state, setState] = useState<AppState>({
@@ -86,6 +87,24 @@ export function useCanapeGenerator() {
         generatedImage1: response.imageUrl,
         isGenerating: false,
       }));
+
+      // Sauvegarder dans Supabase
+      try {
+        await saveHistory({
+          image_url: response.imageUrl,
+          type: state.isDuoMode ? "duo" : "simple",
+          metadata: {
+            sofaUrl: imageSofaUrl,
+            fabricUrl: imageFabricUrl,
+            model: state.selectedModel,
+            description: state.fabricDescription,
+          },
+        });
+        console.log("✅ History saved to Supabase");
+      } catch (historyError) {
+        console.error("⚠️ Failed to save history:", historyError);
+        // Ne pas bloquer l'utilisateur si la sauvegarde échoue
+      }
 
       toast.success("Image générée avec succès !");
     } catch (error) {
