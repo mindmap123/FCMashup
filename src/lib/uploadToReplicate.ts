@@ -1,32 +1,41 @@
 /**
- * Upload une image directement vers Replicate via notre API et retourne l'URL publique
+ * Upload une image DIRECTEMENT vers Replicate depuis le frontend
+ * Contourne le backend pour éviter les erreurs 413
  */
-export async function uploadImageToReplicate(file: File): Promise<string> {
+export async function directUploadToReplicate(
+  file: File,
+  apiToken: string
+): Promise<string> {
   try {
     // Créer un FormData avec le fichier
     const formData = new FormData();
-    formData.append("file", file);
+    formData.append("content", file);
 
-    // Appeler notre API d'upload
-    const response = await fetch("/api/upload", {
+    // Upload DIRECT vers Replicate
+    const response = await fetch("https://api.replicate.com/v1/uploads", {
       method: "POST",
-      body: formData, // Pas de Content-Type header, le navigateur le gère automatiquement
+      headers: {
+        Authorization: `Token ${apiToken}`,
+      },
+      body: formData,
     });
 
     if (!response.ok) {
-      const error = await response
-        .json()
-        .catch(() => ({ message: "Upload failed" }));
-      throw new Error(error.message || `Upload failed: ${response.status}`);
+      const error = await response.text();
+      console.error("Replicate upload error:", error);
+      throw new Error(`Upload failed: ${response.status}`);
     }
 
     const data = await response.json();
 
-    if (!data.uploaded || !data.url) {
-      throw new Error("Invalid response from upload API");
+    // Retourner l'URL publique
+    const url = data.urls?.get || data.url;
+
+    if (!url) {
+      throw new Error("No URL returned from Replicate");
     }
 
-    return data.url;
+    return url;
   } catch (error) {
     console.error("Error uploading to Replicate:", error);
     throw new Error(

@@ -1,36 +1,53 @@
 import { GenerationRequest, GenerationResponse } from "@/types";
-import { uploadImageToReplicate } from "./uploadToReplicate";
+import { directUploadToReplicate } from "./uploadToReplicate";
 
-// En production (Vercel), utilise /api/generate
-// En développement, utilise l'URL du backend local si définie
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "/api/generate";
+
+// Cache du token pour éviter de le récupérer à chaque fois
+let cachedToken: string | null = null;
+
+async function getReplicateToken(): Promise<string> {
+  if (cachedToken) {
+    return cachedToken;
+  }
+
+  const response = await fetch("/api/token");
+  if (!response.ok) {
+    throw new Error("Failed to get Replicate token");
+  }
+
+  const data = await response.json();
+  cachedToken = data.token;
+  return cachedToken;
+}
 
 export async function generateCanapeWithReplicate(
   request: GenerationRequest
 ): Promise<GenerationResponse> {
   try {
-    // Étape 1 : Upload des images vers Replicate si ce sont des data URLs
     let sofaUrl = request.imageSofaUrl;
     let fabricUrl = request.imageFabricUrl;
 
-    // Si les URLs sont des data URLs (base64), les uploader d'abord
+    // Si les URLs sont des data URLs (base64), les uploader DIRECTEMENT vers Replicate
     if (sofaUrl.startsWith("data:")) {
-      console.log("📤 Upload de l'image du canapé vers Replicate...");
+      console.log("📤 Upload direct du canapé vers Replicate...");
+      const token = await getReplicateToken();
       const blob = await fetch(sofaUrl).then((r) => r.blob());
       const file = new File([blob], "sofa.jpg", { type: "image/jpeg" });
-      sofaUrl = await uploadImageToReplicate(file);
+      sofaUrl = await directUploadToReplicate(file, token);
       console.log("✅ Canapé uploadé:", sofaUrl);
     }
 
     if (fabricUrl.startsWith("data:")) {
-      console.log("📤 Upload de l'image du tissu vers Replicate...");
+      console.log("📤 Upload direct du tissu vers Replicate...");
+      const token = await getReplicateToken();
       const blob = await fetch(fabricUrl).then((r) => r.blob());
       const file = new File([blob], "fabric.jpg", { type: "image/jpeg" });
-      fabricUrl = await uploadImageToReplicate(file);
+      fabricUrl = await directUploadToReplicate(file, token);
       console.log("✅ Tissu uploadé:", fabricUrl);
     }
 
-    // Étape 2 : Appeler l'API de génération avec les URLs
+    // Appeler l'API de génération avec les URLs Replicate
     const response = await fetch(BACKEND_URL, {
       method: "POST",
       headers: {
