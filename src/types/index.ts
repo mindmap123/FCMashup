@@ -19,14 +19,14 @@ export interface UploadedImage {
 export interface AppState {
   selectedModel: AIModel | null;
   sofaImage: UploadedImage | null;
-  fabricImage: UploadedImage | null;
+  fabricImage1: UploadedImage | null;
   fabricImage2: UploadedImage | null; // Pour le mode Duo
   fabricDescription: string;
-  generatedImageUrl: string | null;
-  generatedImageUrl2: string | null; // Pour le mode Duo
+  generatedImage1: string | null;
+  generatedImage2: string | null; // Pour le mode Duo
   isGenerating: boolean;
   isDuoMode: boolean;
-  isMultiAngleMode: boolean;
+  showBeforeAfter: boolean;
 }
 
 export interface HistoryItem {
